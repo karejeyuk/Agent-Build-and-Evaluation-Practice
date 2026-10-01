@@ -7,3 +7,4 @@ __pycache__/
 workspace/
 mcp_servers.json
 .playwright-mcp
+/private/

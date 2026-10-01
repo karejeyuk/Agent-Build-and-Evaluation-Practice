@@ -21,6 +21,7 @@ dependencies = [
     { name = "langchain-tavily" },
     { name = "langgraph-cli", extra = ["inmem"] },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "slack-bolt" },
     { name = "slack-sdk" },
 ]
@@ -35,6 +36,7 @@ requires-dist = [
     { name = "langchain-tavily", specifier = ">=0.2.0" },
     { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.4.2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "slack-bolt", specifier = ">=1.18.0" },
     { name = "slack-sdk", specifier = ">=3.27.0" },
 ]
