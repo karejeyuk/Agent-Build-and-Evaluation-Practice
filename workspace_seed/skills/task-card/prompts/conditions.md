@@ -1,10 +1,13 @@
-# 판정 조건표
+---
+name: task-card/conditions
+version: 2
+rules: ["rules.md#판정 조건", "rules.md#용어 정의"]
+---
+입력: [1차 호출이 만든 카드 목록(카드 번호 포함)] [Q번호와 면담자·담당자 표지를 붙인 인터뷰 원문] [검토 완료된 0단계 요약서(있을 때)] [규칙 사본의 판정 조건 6개와 용어 정의]
 
-입력: 카드 추출 JSON, 동일한 인터뷰 원문, 선택적 검토 완료 사전 조사 요약서, `rules.md`의 조건 1~6과 용어 정의.
+지시: 카드마다 조건 1~6을 '충족' 또는 '미충족'으로 적어라. 충족이면 근거를 원문 그대로 인용하라. 발화 인용은 담당자 줄(메모는 M 문단)에서, 긍정 답 인용은 같은 Q번호의 면담자 줄과 담당자 줄을 이은 문자열에서, 문서 인용은 요약서 발췌의 줄 범위에서 가져와라. 미충족이면 reason을 '해당 발화 없음'으로 적고, 관련 발화가 있지만 조건에 맞지 않으면 '관련 발화: Q번호, 조건에 맞지 않는 이유'로 적어라. 담당자가 판단할 일이 없다고 답했으면 조건 4의 reason을 '판단 없음 확인: Q번호'로 적고 그 발화를 evidence에 인용하라. 횟수만 있고 계기나 정해진 주기가 없거나 '수시로', '필요할 때'로 답해 조건 6이 미충족이면 reason을 '계기 없음: Q번호'로 적어라. 발화는 용어 정의의 '발화의 공유'에 따라 관련된 모든 카드에 적용하라. 조건 4를 충족한 카드에는 judgment_point에 판단 지점을 한 줄로 적어라. 형은 고르지 마라. 형은 코드가 정한다. 조건 2를 충족한 카드에만 표준화 선행 권고 초안을 '매번 달라지는 부분(근거 인용)', '표준화할 대상(절차, 양식, 판단 기준 가운데 하나)', '담당자에게 확인할 질문' 세 항목으로 쓰고, 원문에 없는 개선 방법은 쓰지 마라. 조건 2가 미충족이면 standardization_recommendation은 null로 둔다.
 
-각 카드마다 조건 1~6을 `충족` 또는 `미충족`으로 작성한다. 충족이면 해당 원문 줄에서 연속된 인용을 넣는다. 미충족이면 `reason`에 해당 발화 없음 또는 관련 발화가 조건에 맞지 않는 이유를 적는다. 판단이 없다고 담당자가 명시했다면 조건 4의 `reason`은 `판단 없음 확인`, `citation_valid`는 `true`로 둔다. 조건 6이 계기 없는 횟수 발화 때문에 미충족이면 `reason`은 `계기 없음`으로 둔다.
+근거 객체는 1차 호출과 같다: 발화 {"source_type":"utterance","q":"Q2","speaker":"담당자"|"both","quote":"…"}, 메모 {"source_type":"memo","m":"M1","quote":"…"}, 문서 {"source_type":"document","filename":"…","start_line":1,"end_line":2,"quote":"…"}.
 
-조건 4가 충족이면 `judgment_point`에 지점 하나를 적는다. 조건 2가 충족이면 카드별 `standardization_recommendation`에 `variable_part`, `target`(절차·양식·판단 기준), `question`을 적는다. 조건을 직접 채우지 않는 다른 카드의 근거를 잘못 공유하지 않는다. 형은 고르지 않는다.
-
-출력은 JSON 객체만 반환한다.
-`{"cards":[{"card_id":"카드 번호","conditions":{"1":{"status":"충족|미충족","reason":"","evidence":[]},"2":{"status":"미충족","reason":"해당 발화 없음","evidence":[]},"3":{},"4":{},"5":{},"6":{}},"judgment_point":"","standardization_recommendation":{"variable_part":"","target":"","question":""}}]}`
+출력은 아래 JSON 하나다. 입력의 모든 카드 번호를 빠짐없이 한 번씩 쓴다. 설명과 코드 펜스는 쓰지 않는다.
+{"cards":[{"card_id":"카드 번호","conditions":{"1":{"status":"충족","evidence":[근거 객체]},"2":{"status":"미충족","reason":"해당 발화 없음","evidence":[]},"3":{…},"4":{…},"5":{…},"6":{…}},"judgment_point":"조건 4 충족일 때 판단 지점 한 줄, 아니면 빈 문자열","standardization_recommendation":null 또는 {"variable_part":{"text":"매번 달라지는 부분","evidence":[근거 객체]},"target":"절차|양식|판단 기준","question":"담당자에게 확인할 질문"}}]}

@@ -33,6 +33,9 @@ from langchain.chat_models import init_chat_model
 # 로컬 모듈: 외부 서비스 커넥터(Slack / Telegram / Email)
 from connectors import build_messaging_tools
 
+# 로컬 모듈: AI 전환 파이프라인 가드(private/ 차단, outputs/·core/ 쓰기 차단, inputs/ 가명 처리 검사)
+from guards import PipelineGuard
+
 # ---------------------------------------------------------------------------
 # 환경변수 & 모델
 # ---------------------------------------------------------------------------
@@ -51,9 +54,14 @@ if not api_key:
 insecure_http_client = httpx.Client(verify=False)
 insecure_http_async_client = httpx.AsyncClient(verify=False)
 
+# 모델 ID와 설정은 core/run.py가 산출물의 '실행 버전' 줄에 적는다(기획서 5.7, 5.8).
+# 바꾸면 시나리오 1~5로 v2 기준을 다시 통과한 뒤 실전에 쓴다.
+MODEL_ID = "moonshotai/kimi-k3"
+REASONING_EFFORT = "medium"
+
 # OpenRouter는 OpenAI 호환 API를 제공하므로 model_provider를 openai로 설정합니다.
 model = init_chat_model(
-    model="moonshotai/kimi-k3",
+    model=MODEL_ID,
     model_provider="openai",
     api_key=api_key,
     base_url=base_url,
@@ -62,7 +70,7 @@ model = init_chat_model(
     # reasoning_effort 는 OpenRouter 가 모델별 추론 설정으로 변환한다(kimi-k3 는
     # reasoning_effort 를 지원). low 는 지연이 짧고, 복잡한 추론·에이전트 지속성이
     # 필요하면 medium/high 로 올린다.
-    reasoning_effort="medium",
+    reasoning_effort=REASONING_EFFORT,
     http_client=insecure_http_client,
     http_async_client=insecure_http_async_client,
 )
@@ -148,6 +156,28 @@ if not _WS_AGENTS.exists():
 # 저장소 루트에서 workspace 로 부팅 시 한 방향으로만 복사한다(시드 미러 대상이 아니며,
 # 에이전트가 workspace/core 를 고쳐도 git 에는 반영되지 않고 다음 부팅 때 원래 내용으로 갱신된다).
 _sync_tree(Path("core").resolve(), WORKSPACE / "core")
+
+# AI 전환 파이프라인 폴더(core/agent.md '작업 공간' 참고). private/는 에이전트 파일 도구로 열 수 없다.
+for _folder in ("inputs", "tests", "private", "work", "outputs"):
+    (WORKSPACE / _folder).mkdir(parents=True, exist_ok=True)
+
+
+def _code_commit() -> str:
+    """산출물 실행 버전에 적을 코드 커밋 해시(커밋하지 않은 수정이 있으면 -dirty)."""
+    import subprocess
+
+    try:
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=10, check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=10).stdout.strip()
+        return commit + ("-dirty" if dirty else "")
+    except (OSError, subprocess.SubprocessError):
+        return "[확인 필요: 코드 커밋]"
+
+
+# execute 가 띄우는 core/run.py 는 이 환경변수로 모델 ID·설정·커밋을 읽는다(LocalShellBackend inherit_env=True).
+os.environ["AGENT_MODEL_ID"] = MODEL_ID
+os.environ["AGENT_MODEL_SETTINGS"] = f"reasoning_effort={REASONING_EFFORT}, streaming=True"
+os.environ["AGENT_CODE_COMMIT"] = _code_commit()
 
 # 이메일 트리거 규칙 파일(workspace/email_triggers.json). 없으면 빈 배열로 만들어
 # 두어(스킬 set-email-triggers 로 CRUD) 위치를 발견하기 쉽게 한다.
@@ -334,59 +364,26 @@ MEMORY_SOURCES = ["/AGENTS.md"]
 # ---------------------------------------------------------------------------
 # 시스템 프롬프트
 # ---------------------------------------------------------------------------
-# deepagents 내장 BASE_AGENT_PROMPT 를 그대로 가져온 것이다. 자유롭게 편집하면 된다.
+# 기획서의 agent.md(부록 B-1)다. 머리말의 version 은 core/run.py 가 산출물의 실행 버전에
+# 적으므로, 본문을 고치면 version 을 올린다. 여기서는 머리말을 뺀 본문만 쓴다.
 # (파일시스템 / write_todos / execute 도구 '사용법' 은 이와 별개로 각 미들웨어가
 #  자동 주입하므로, 여기서는 에이전트의 행동 원칙만 다룬다.)
-SYSTEM_PROMPT = """당신은 기업의 AI 전환을 지원하는 엔지니어 한 명을 돕는 업무 분석 보조 에이전트다. 현업 담당자는 이 에이전트를 직접 사용하지 않는다. 인터뷰와 문서에서 확인한 사실을 정리하고 산출물 초안을 만들며, 인터뷰 진행·판단·고객사 합의·최종 승인은 엔지니어가 맡는다.
+def _load_agent_prompt(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("---\n"):
+        text = text.split("---", 2)[2]
+    return text.strip()
 
-## 기본 원칙
 
-- 입력 자료에 없는 사실을 만들거나, 모르는 내용을 추측하지 않는다. 확인하지 못한 항목은 `[확인 필요: 내용]`으로 남긴다.
-- 발화와 문서의 인용은 원문 그대로 옮기고 출처를 붙인다. 발화는 Q번호(질문 번호가 없는 메모는 M번호), 문서는 파일명과 줄 번호를 기록한다. 요약·의역을 직접 인용처럼 쓰지 않는다.
-- 인용 대조나 형식 검증을 실제 코드로 실행하지 않았다면 검증을 통과했다고 말하지 않는다. 자동 검증 코드가 없으면 그 한계를 밝히고 엔지니어 확인 항목으로 남긴다.
-- 업무 분류(A형/B1형/B2형/C형), 적합성 등급, 고객사 우선순위를 독자적으로 확정하지 않는다. 구현된 판정·채점 스크립트가 있으면 그 결과를 사용하고, 없으면 근거와 미확인 사항만 정리해 제안 초안으로 표시한다.
-- 모든 결과물은 초안이다. 엔지니어 확정란을 대신 채우거나, 확정되지 않은 산출물을 다음 단계 입력으로 취급하지 않는다.
-- 실제 고객사 자료는 고객사의 사용 허용과 필요한 가명 처리를 확인한 뒤 다룬다. 식별 정보와 영업 수치를 불필요하게 노출하거나 외부로 보내지 않는다. 가명 매핑표와 원본은 외부 전송 대상이 아니다.
-- 자연스러운 한국어를 사용한다. 담당자나 고객사에게 전달할 문안은 존댓말, 내부 분석은 한다체로 쓴다.
-
-## 업무 단계
-
-요청된 단계만 수행하고, 사용자가 요청하지 않은 다음 단계로 넘어가지 않는다.
-
-0. 사전 조사: 제공된 부서 문서에 적힌 업무와 절차만 추려 문서 근거를 붙인다. 담당자·빈도·시스템·절차 중 빠진 정보는 확인 항목으로 분리한다. 문서가 없으면 조사 내용을 지어내지 않는다.
-1. 인터뷰 가이드: 담당자 프로필, 인터뷰 조건, 검토 완료된 사전 조사 결과를 바탕으로 질문 초안을 만든다. 인터뷰는 사람이 진행하며, 메일 질문지는 담당자에게 바로 보낼 수 있는 존댓말로 작성한다.
-2. 인터뷰 정리: 제공된 인터뷰 원문에서 업무 카드를 추출하고 발화·문서 근거와 미확인 항목을 보존한다. 판정 조건과 분류 결과를 구분하며, 코드 판정기가 없으면 형을 확정하지 않는다.
-3. 적합성 평가: 확정된 카드만 입력으로 취급한다. 반복성·절차 명확성·데이터 접근성·오류 영향도의 근거를 정리한다. 채점 스크립트가 없으면 코드가 산출한 점수인 것처럼 제시하지 않는다.
-4. 설계서: 착수가 엔지니어에 의해 확정된 업무만 다룬다. 정해진 9개 목차를 유지하고, 확인되지 않은 설계 정보는 표시한다. B1형이거나 오류 영향도 점수가 1~2점인 업무에는 사람 승인 단계를 포함한다.
-5. 검증·보고: 설계서의 성공 기준, 실제 측정치, 가명 처리된 피드백을 구분한다. 측정되지 않은 값은 만들지 않고 `[측정 불가]`로 남긴다.
-
-## 엔지니어 확정
-
-- 사전 조사 요약서: `검토 완료`
-- 인터뷰 시트 또는 메일 질문지: `사용 승인`
-- 업무 카드: 카드마다 A형, B1형, B2형, C형 또는 다음 회차 확인
-- 종합 순위표: 업무마다 즉시 착수, 검토 후 착수, 착수 보류 또는 다음 회차 확인
-- 설계서: `승인`
-- 성과 리포트: `수치 확정`
-
-확정란은 엔지니어가 직접 기록한다. 확정되지 않은 결과를 후속 단계에서 확정 결과처럼 사용하지 않는다.
-
-## 작업 방식과 도구
-
-- 요청에 해당하는 스킬이 `/skills/`에 있으면 전체 지침을 읽고 따른다. 관련 없는 스킬을 억지로 적용하지 않는다.
-- 작업 전 관련 입력과 주변 구현을 확인하고, 요청된 범위에서 파일을 수정한 뒤 가능한 가장 좁은 검증을 실행한다.
-- 파일 도구의 `/`는 에이전트 작업 공간의 루트다. 경로 앞에 `workspace/`를 붙이지 않는다. `execute`는 작업 공간 기준 상대 경로를 사용한다.
-- 질문은 입력이 부족해 다음 작업을 정할 수 없을 때만 최소한으로 한다. 이미 제공된 정보를 다시 묻지 않는다.
-- 간결하게 응답하고, 불필요한 인사나 작업 예고를 붙이지 않는다. 막힌 부분이나 실행하지 못한 검증은 분명히 밝힌다."""
+SYSTEM_PROMPT = _load_agent_prompt(Path("core/agent.md"))
 
 
 # ---------------------------------------------------------------------------
 # 에이전트
 # ---------------------------------------------------------------------------
 # create_deep_agent 은 넘긴 system_prompt 를 '내장 BASE_AGENT_PROMPT 앞에 덧붙인다'.
-# 위 SYSTEM_PROMPT 는 그 내장 프롬프트를 그대로 복사한 것이라, system_prompt 로 넘기면
-# 내용이 '중복'된다. 그래서 대신 HarnessProfile.base_system_prompt 로 등록해 내장
-# 프롬프트를 '교체'한다(중복 없음). 프로필은 모델에 매칭되며, 키는 "<provider>:<identifier>"
+# 위 SYSTEM_PROMPT(agent.md)는 내장 프롬프트를 대신하므로, system_prompt 로 넘기지 않고
+# HarnessProfile.base_system_prompt 로 등록해 내장 프롬프트를 '교체'한다(중복 없음). 프로필은 모델에 매칭되며, 키는 "<provider>:<identifier>"
 # 형식이라 모델을 바꿔도 아래 계산식이 그대로 맞는 키를 만든다.
 _profile_key = f"{get_model_provider(model)}:{get_model_identifier(model)}"
 register_harness_profile(_profile_key, HarnessProfile(base_system_prompt=SYSTEM_PROMPT))
@@ -406,6 +403,7 @@ def build_agent(checkpointer=None):
         backend=backend,
         skills=SKILL_SOURCES,
         memory=MEMORY_SOURCES,
+        middleware=[PipelineGuard()],
         checkpointer=checkpointer,
     )
 

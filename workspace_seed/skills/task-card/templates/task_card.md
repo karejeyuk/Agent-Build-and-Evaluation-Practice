@@ -1,9 +1,8 @@
 # 업무 상세 카드 및 판정 조건표
 
-출처: {{SOURCE}}
-인터뷰 식별자: {{INTERVIEW_ID}}
-실행 버전: {{EXECUTION_VERSION}}
-엔지니어 확정: (비어 있음)
+{{HEADER}}
+
+<!-- 문체: 한다체. 엔지니어 확정은 카드마다 '엔지니어 확정:' 줄에 A형, B1형, B2형, C형, 다음 회차 확인 가운데 하나를 적고, 제안과 다르면 바로 아래에 '변경 사유:' 줄을 더한다. 분류와 판단 개입 지점은 코드가 판정 조건표로 채운 값이다. -->
 
 ## ① 업무 상세 카드
 
@@ -19,8 +18,10 @@
 
 ## ④ 표준화 선행 권고 초안
 
-{{STANDARDIZATION_RECOMMENDATIONS}}
+{{RECOMMENDATIONS}}
 
 ## ⑤ C형 기록
 
-{{C_TYPE_RECORDS}}
+{{C_RECORDS}}
+
+{{WARNINGS}}

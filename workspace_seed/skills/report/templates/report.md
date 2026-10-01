@@ -1,14 +1,13 @@
 # PoC 성과 리포트 초안
 
-출처: {{SOURCE}}
-인터뷰 식별자: {{INTERVIEW_ID}}
-실행 버전: {{EXECUTION_VERSION}}
-엔지니어 확정: (비어 있음)
+{{HEADER}}
+
+<!-- 문체: 리포트 본문은 한다체, 임원용 1쪽 요약은 존댓말. 실측치에는 (실측), 추정치에는 (추정), 성공 정의의 목표치에는 (목표)를 붙인다. 수치는 엔지니어가 확정한다. 엔지니어는 상단 '엔지니어 확정' 줄에 '수치 확정'을 적는다. -->
 
 ## 달성도
 
-| 성공 기준 | 목표 | 실측 | 결과 |
-|---|---|---|---|
+| 성공 기준 | 목표 | 실측 | 결과 | 실측 출처 |
+|---|---|---|---|---|
 {{METRICS}}
 
 ## 미달 원인
@@ -18,22 +17,27 @@
 ## 현업 피드백
 
 ### 긍정
-{{POSITIVE_FEEDBACK}}
+
+{{POSITIVE}}
 
 ### 개선
-{{IMPROVEMENT_FEEDBACK}}
+
+{{IMPROVEMENT}}
 
 ### 추가 기대
-{{EXPECTATION_FEEDBACK}}
+
+{{EXPECTATION}}
 
 ## 개선 권고안
 
 {{RECOMMENDATIONS}}
 
-## 절감 시간 참고치
+## 절감 시간 추정
 
 {{SAVINGS}}
 
 ## 임원용 1쪽 요약
 
 {{EXECUTIVE_SUMMARY}}
+
+{{WARNINGS}}
